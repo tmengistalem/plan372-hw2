@@ -1,33 +1,197 @@
 ---
 title: "Restaurant analysis"
 author: "Tsega M"
-format: html
+format: pdf
 editor: visual
 ---
 
+## Introduction
 
-``` {r}
+My analysis explores the inspection scores of restaurants and other food facilities in Wake County. The goal is to identify trends based on factors such as restaurant age, city, and inspector behavior. I also evaluate if older vs. newer establishments or specific facility types (like restaurants vs. food trucks) have better sanitation scores.
+
+### Loading Libraries and Data
+
+```{r}
+# Loading necessary libraries for data manipulation and visualization
 library(tidyverse)
+library(lubridate)
+library(ggthemes)
+
+# Loading the dataset and preview the first few rows
+data = read_csv("restaurant_inspections.csv")
+head(data)
 ```
----
-
-## Quarto
-
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
 
 ```{r}
-1 + 1
+# Reviewing the dataset for personal-understanding
+# colnames(data)
+
+summary(data)
 ```
 
-You can add options to executable code like this
+*Explanation*: Loading the required libraries, `tidyverse` for data manipulation and `ggplot2` for plotting, and `lubridate` for working with dates. The dataset is then loaded, and the first few rows are displayed to understand its structure. Additionally ran summary stats on the dataset to get fuller understnading of the dataset.
+
+## Q1: Distribution of Inspection Scores
+
+As we can see in the distribution of the inspection scores, most of the food-service establishments in Wake County fall in the 80+ score given the left skewedness of the distribution.
 
 ```{r}
-#| echo: false
-2 * 2
+# Visualize the distribution of inspection scores using a histogram
+ggplot(data, aes(x=SCORE)) +
+  geom_histogram(binwidth=1, fill="blue", color="black") +
+  labs(title="Distribution of Inspection Scores", x="Inspection Score", y="Count")
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+*Explanation*: From the histogram, it's clear that the majority of restaurants in Wake County have high sanitation scores, typically between 90 and 100. This reflects the county's focus on maintaining cleanliness in food establishments, with very few establishments receiving low scores. The distribution skews toward the higher end, indicating a focus on maintaining good hygiene practices among the majority of restaurants.
+
+## Q2: Restaurant Age vs Inspection Scores
+
+```{r}
+# Convert the restaurant open date to a date object and calculate restaurant age
+data = data %>%
+  mutate(RESTAURANTOPENDATE = ymd_hms(RESTAURANTOPENDATE),
+         restaurant_age = as.numeric(difftime(Sys.Date(), RESTAURANTOPENDATE, units = "days") / 365))
+
+# Scatter plot to see the trend of restaurant age vs inspection score
+ggplot(data, aes(x=restaurant_age, y=SCORE)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  labs(title="Inspection Scores by Restaurant Age", x="Restaurant Age (Years)", y="Score")
+```
+
+*Explanation*: The scatter plot of inspection scores against restaurant age doesn't show a strong trend, suggesting that both newer and older establishments tend to perform similarly in inspections. Both older and newer establishments tend to score similarly, with no clear trend indicating that either newer or older restaurants consistently perform better or worse in inspections.
+
+## Q3: City-Wise Analysis of Inspection Scores
+
+```{r}
+# Clean city names and group by city to calculate mean inspection scores and sample sizes
+data$CITY <- str_to_upper(data$CITY)  # Convert city names to uppercase for consistency
+
+# Recode common variations or misspellings
+data <- data %>%
+  mutate(CITY = recode(CITY, "RALEIGH" = "RALEIGH", "RALEGH" = "RALEIGH", "CARY" = "CARY"))
+
+# Group by city and summarize the data
+city_summary <- data %>%
+  filter(!is.na(CITY)) %>%
+  group_by(CITY) %>%
+  summarize(mean_score = mean(SCORE, na.rm = TRUE), sample_size = n())
+
+# View the city-wise summary
+print(city_summary)
+
+```
+
+*Explanation*: After cleaning the city names by converting them to uppercase and correcting common misspellings (like 'Raleigh' vs. 'Ralegh'), my analysis shows that there is some variation in inspection scores by city. Cities like Raleigh and Cary have higher average scores, while smaller cities show more variability. This suggests that sanitation standards may be more consistently enforced or followed in larger cities, where there might be more public scrutiny or resources available for health inspections.
+
+## Q4: Inspector-Wise Variation in Inspection Scores
+
+```{r}
+# Check for missing inspector data and filter them out
+inspector_summary <- data %>%
+  filter(!is.na(INSPECTOR)) %>%
+  group_by(INSPECTOR) %>%
+  summarize(mean_score = mean(SCORE, na.rm = TRUE), sample_size = n())
+
+# View the summary of inspection scores by inspector
+print(inspector_summary)
+```
+
+*Explanation*: This section looks at inspection scores grouped by the inspector. We filter out any missing inspector data and calculate the average score each inspector has given, along with the sample size for each inspector. This can help identify whether certain inspectors tend to be stricter or more lenient. The analysis shows that while most inspectors score establishments within a similar range, there are some inspectors whose average scores are noticeably higher or lower than the rest. This could indicate that certain inspectors are more thorough or lenient in their evaluations, potentially reflecting differences in inspection rigor.
+
+##          Q5: **Do small sample sizes explain extreme results?**
+
+Yes, the analysis of sample sizes reveals that some cities and inspectors have very small sample sizes. In such cases, it is possible that extreme results (either very high or very low average scores) could be due to the limited number of inspections conducted. A small sample size tends to introduce more variability, so this is a plausible explanation for some of the outliers observed in the analysis by city and inspector.
+
+## Q6: Analysis by Facility Type
+
+```{r}
+# Check if restaurants score higher compared to other facility types
+facility_summary <- data %>%
+  filter(!is.na(FACILITYTYPE)) %>%
+  group_by(FACILITYTYPE) %>%
+  summarize(mean_score = mean(SCORE, na.rm = TRUE), sample_size = n())
+
+# View the summary
+print(facility_summary)
+```
+
+*Explanation*: Here, we compare the mean inspection scores of restaurants versus other types of facilities (like food trucks) to see if restaurants generally have better scores. The analysis comparing different facility types (restaurants, food trucks, etc.) shows that restaurants tend to have slightly higher average scores than other types of facilities. This makes sense, as restaurants typically serve more customers and may face greater scrutiny during inspections, leading to more consistently high sanitation standards compared to smaller or mobile food facilities like food trucks.
+
+## Q7: **Repeat the analyses for restaurants specifically**
+
+```{r}
+# Filter for only restaurants
+restaurant_data <- data %>%
+  filter(FACILITYTYPE == "Restaurant")
+
+# Visualize the overall distribution of inspection scores for restaurants
+ggplot(restaurant_data, aes(x=SCORE)) +
+  geom_histogram(binwidth=1, fill="blue", color="black") +
+  labs(title="Distribution of Inspection Scores (Restaurants Only)", x="Inspection Score", y="Count")
+
+```
+
+```{r}
+
+# Analyze inspection scores vs. restaurant age (only for restaurants)
+restaurant_data <- restaurant_data %>%
+  mutate(RESTAURANTOPENDATE = ymd_hms(RESTAURANTOPENDATE),
+         restaurant_age = as.numeric(difftime(Sys.Date(), RESTAURANTOPENDATE, units = "days") / 365))
+
+# Scatter plot for restaurant age vs. inspection score (for restaurants only)
+ggplot(restaurant_data, aes(x=restaurant_age, y=SCORE)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  labs(title="Restaurant Age vs Inspection Score (Restaurants Only)", x="Restaurant Age (Years)", y="Score")
+
+```
+
+```{r}
+# Clean up city names and analyze inspection scores by city (for restaurants only)
+restaurant_data$CITY <- str_to_upper(restaurant_data$CITY)  # Convert to uppercase
+
+# Recode city names
+restaurant_data <- restaurant_data %>%
+  mutate(CITY = recode(CITY, "RALEIGH" = "RALEIGH", "RALEGH" = "RALEIGH", "CARY" = "CARY"))
+
+# Group by city and summarize (for restaurants only)
+restaurant_city_summary <- restaurant_data %>%
+  filter(!is.na(CITY)) %>%
+  group_by(CITY) %>%
+  summarize(mean_score = mean(SCORE, na.rm = TRUE), sample_size = n())
+
+print(restaurant_city_summary)
+
+```
+
+```{r}
+# Analyze inspection scores by inspector (for restaurants only)
+restaurant_inspector_summary <- restaurant_data %>%
+  filter(!is.na(INSPECTOR)) %>%
+  group_by(INSPECTOR) %>%
+  summarize(mean_score = mean(SCORE, na.rm = TRUE), sample_size = n())
+
+print(restaurant_inspector_summary)
+
+```
+
+```{r}
+# Check for small sample sizes (for restaurants only)
+# Filter for cities with more than 10 restaurant inspections
+restaurant_city_summary_filtered <- restaurant_city_summary %>%
+  filter(sample_size > 10)  # Ensuring that we focus on cities with more than 10 restaurants
+
+# Filter for inspectors with more than 10 inspections
+restaurant_inspector_summary_filtered <- restaurant_inspector_summary %>%
+  filter(sample_size > 10)  # Focus on inspectors with more than 10 inspections
+
+# Display the filtered results
+print("Filtered City Summary (Cities with more than 10 restaurants):")
+print(restaurant_city_summary_filtered)
+
+print("Filtered Inspector Summary (Inspectors with more than 10 inspections):")
+print(restaurant_inspector_summary_filtered)
+```
+
+When the analyses were repeated for restaurants only, the trends largely held. The distribution of scores remained high, with most restaurants scoring between 90 and 100. Additionally, no significant trend was observed between restaurant age and score, and there were some variations in scores by city and inspector. The issue of small sample sizes also remained, particularly in smaller cities and with certain inspectors. Overall, restaurants appear to maintain high sanitation standards across the board, though there are some minor variations depending on location and who conducted the inspection.
